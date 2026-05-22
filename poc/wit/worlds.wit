@@ -10,28 +10,34 @@ interface host-api {
 world ui-world {
   import host-api;
 
-  use input.{key-event};
+  use input.{engine-context, input-action, input-state};
   use graphic.{render-command};
   use command.{command-desc, response-command};
   use system.{text-segment};
 
-  export handle-input: func(event: key-event) -> bool;
+  export handle-input: func(state: input-state);
   export run-command: func(cmd: string, args: list<string>) -> response-command;
   export update-module: func(time: f32, dt: f32, w: f32, h: f32) -> list<render-command>;
 
   export get-commands: func() -> list<command-desc>;
   export accept-log: func(segments: list<text-segment>);
+
+  export serialize: func() -> list<u8>;
+  export deserialize: func(state: list<u8>);
 }
 
 world cube-world {
   import host-api;
 
-  use input.{key-event};
+  use input.{engine-context, input-action, input-state};
   use graphic.{render-command};
   use command.{command-desc, response-command};
 
-  export handle-input: func(event: key-event) -> bool;
+  export handle-input: func(state: input-state);
   export get-commands: func() -> list<command-desc>;
   export run-command: func(cmd: string, args: list<string>) -> response-command;
   export update-module: func(time: f32, dt: f32, w: f32, h: f32) -> list<render-command>;
+
+  export serialize: func() -> list<u8>;
+  export deserialize: func(state: list<u8>);
 }

@@ -5,7 +5,7 @@ mod watcher;
 use colored::*;
 use macroquad::prelude::{Color as MQColor, *};
 use manager::ModuleManager;
-use module::{KeyEvent, ResponseCommand};
+use module::{EngineContext, InputAction, InputState, ResponseCommand};
 use wasmtime::{Config, Engine};
 
 use crate::module::RenderCommand;
@@ -140,21 +140,61 @@ async fn main() -> Result<(), anyhow::Error> {
             manager.reload_module(&changed_module);
         }
 
+        let mut actions = Vec::new();
+
         if is_key_pressed(KeyCode::F1) {
-            manager.handle_inputs(KeyEvent::Pressed("F1".into()));
+            actions.push(InputAction::ToggleConsole);
         }
         if is_key_pressed(KeyCode::Enter) {
-            manager.handle_inputs(KeyEvent::Pressed("Enter".into()));
+            actions.push(InputAction::Confirm);
         }
         if is_key_pressed(KeyCode::Backspace) {
-            manager.handle_inputs(KeyEvent::Pressed("Backspace".into()));
+            actions.push(InputAction::Delete);
         }
 
-        while let Some(c) = get_char_pressed()
-            && !c.is_control()
-        {
-            manager.handle_inputs(KeyEvent::CharInput(c.to_string()));
+        if is_key_pressed(KeyCode::Up) {
+            actions.push(InputAction::NavigateUp);
+            actions.push(InputAction::MoveUp);
         }
+        if is_key_pressed(KeyCode::Down) {
+            actions.push(InputAction::NavigateDown);
+            actions.push(InputAction::MoveDown);
+        }
+        if is_key_pressed(KeyCode::Left) {
+            actions.push(InputAction::MoveLeft);
+        }
+        if is_key_pressed(KeyCode::Right) {
+            actions.push(InputAction::MoveRight);
+        }
+
+        let (_, scroll_y) = mouse_wheel();
+        if scroll_y > 0.0 {
+            actions.push(InputAction::ScrollUp);
+        } else if scroll_y < 0.0 {
+            actions.push(InputAction::ScrollDown);
+        }
+
+        let mut raw_chars = String::new();
+        while let Some(c) = get_char_pressed() {
+            if !c.is_control() {
+                raw_chars.push(c);
+            }
+        }
+
+        if actions.contains(&InputAction::ToggleConsole) {
+            manager.context = match manager.context {
+                EngineContext::Gameplay => EngineContext::UiConsole,
+                EngineContext::UiConsole => EngineContext::Gameplay,
+            };
+        }
+
+        let input_state = InputState {
+            context: manager.context,
+            actions,
+            raw_chars,
+        };
+
+        manager.handle_inputs(input_state);
 
         manager.broadcast_logs();
 

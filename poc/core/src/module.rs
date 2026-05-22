@@ -30,7 +30,7 @@ pub mod cube_plugin {
 pub use ui_plugin::local::zappy::{
     command::{CommandDesc, ResponseCommand},
     graphic::{Color, RenderCommand},
-    input::KeyEvent,
+    input::{EngineContext, InputAction, InputState},
     system::TextSegment,
 };
 
@@ -256,10 +256,9 @@ impl HostState {
                 );
                 out.append(&mut parse_ansi_colors(
                     format!(
-                        "{} {:<15} {:<10} {} {}\n",
+                        "{} {:<25}  {} {}\n",
                         ">".green(),
                         "help".green(),
-                        "".magenta(),
                         "-".bright_black(),
                         "Show this help menu".blue()
                     )
@@ -267,7 +266,20 @@ impl HostState {
                 ));
                 out.append(&mut parse_ansi_colors(
                     format!(
-                        "{} {:<15} {:<10} {} {}\n",
+                        "{} {:<25}  {} {}\n",
+                        ">".green(),
+                        "modules".green(),
+                        "-".bright_black(),
+                        "List currently loaded modules".blue()
+                    )
+                    .as_str(),
+                ));
+                let reload_raw = format!("{} {}", "reload", "[MODULE]");
+                let padding = 25_usize.saturating_sub(reload_raw.len());
+                let spaces = " ".repeat(padding);
+                out.append(&mut parse_ansi_colors(
+                    format!(
+                        "{} {}  {}{spaces} {} {}\n",
                         ">".green(),
                         "reload".green(),
                         "[MODULE]".magenta(),
@@ -276,24 +288,25 @@ impl HostState {
                     )
                     .as_str(),
                 ));
-                out.append(&mut parse_ansi_colors(
-                    format!(
-                        "{} {:<15} {:<10} {} {}\n",
-                        ">".green(),
-                        "modules".green(),
-                        "".magenta(),
-                        "-".bright_black(),
-                        "List currently loaded modules".blue()
-                    )
-                    .as_str(),
-                ));
                 for (_, name, options, help) in &s.cached_commands {
+                    let cmd_raw = if options.is_empty() {
+                        name.clone()
+                    } else {
+                        format!("{} {}", name, options)
+                    };
+
+                    let padding = 25_usize.saturating_sub(cmd_raw.len());
+                    let spaces = " ".repeat(padding);
+                    let cmd_colored = if options.is_empty() {
+                        format!("{} {}", name.green(), spaces)
+                    } else {
+                        format!("{}  {}{}", name.green(), options.magenta(), spaces)
+                    };
                     out.append(&mut parse_ansi_colors(
                         format!(
-                            "{} {:<15} {:<10} {} {}\n",
+                            "{} {} {} {}\n",
                             ">".green(),
-                            name.green(),
-                            options.magenta(),
+                            cmd_colored,
                             "-".bright_black(),
                             help.blue()
                         )
@@ -307,16 +320,18 @@ impl HostState {
                     format!(
                         "{} {} {}\n",
                         "=====".bright_black(),
-                        "LOADED MODULES".cyan(),
+                        "LOADED MODULES".bright_purple(),
                         "=====".bright_black()
                     )
                     .as_str(),
                 );
                 for (i, module) in s.loaded_modules.iter().enumerate() {
-                    out.append(&mut parse_ansi_colors(
+                    let module_colored = if i % 2 == 0 {
                         format!("{} {}\n", format!("{}.", i).black(), module.bright_blue())
-                            .as_str(),
-                    ));
+                    } else {
+                        format!("{} {}\n", format!("{}.", i).black(), module.bright_cyan())
+                    };
+                    out.append(&mut parse_ansi_colors(module_colored.as_str()));
                 }
                 out
             }
@@ -420,10 +435,10 @@ impl ModuleInstance {
         }
     }
 
-    pub fn call_handle_input(&mut self, event: &KeyEvent) -> Result<bool, wasmtime::Error> {
+    pub fn call_handle_input(&mut self, state: &InputState) -> Result<(), wasmtime::Error> {
         match &self.bindings {
-            ModuleBindings::Ui(ui) => ui.call_handle_input(&mut self.store, event),
-            ModuleBindings::Cube(cube) => cube.call_handle_input(&mut self.store, event),
+            ModuleBindings::Ui(ui) => ui.call_handle_input(&mut self.store, state),
+            ModuleBindings::Cube(cube) => cube.call_handle_input(&mut self.store, state),
         }
     }
 
@@ -449,6 +464,20 @@ impl ModuleInstance {
         match &self.bindings {
             ModuleBindings::Ui(ui) => ui.call_accept_log(&mut self.store, logs),
             ModuleBindings::Cube(_) => Ok(()),
+        }
+    }
+
+    pub fn call_serialize(&mut self) -> Option<Vec<u8>> {
+        match &self.bindings {
+            ModuleBindings::Ui(ui) => ui.call_serialize(&mut self.store).ok(),
+            ModuleBindings::Cube(cube) => cube.call_serialize(&mut self.store).ok(),
+        }
+    }
+
+    pub fn call_deserialize(&mut self, state: &[u8]) -> Option<()> {
+        match &self.bindings {
+            ModuleBindings::Ui(ui) => ui.call_deserialize(&mut self.store, state).ok(),
+            ModuleBindings::Cube(cube) => cube.call_deserialize(&mut self.store, state).ok(),
         }
     }
 }

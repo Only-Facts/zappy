@@ -1,4 +1,4 @@
-use crate::module::{KeyEvent, ModuleInstance, TextSegment};
+use crate::module::{EngineContext, InputState, ModuleInstance, TextSegment};
 use colored::*;
 use std::{
     path::{Path, PathBuf},
@@ -18,6 +18,7 @@ pub struct ModuleManager {
     engine: Engine,
     pub pipeline: Vec<ModuleInstance>,
     pub shared: Arc<Mutex<SharedEngineState>>,
+    pub context: EngineContext,
 }
 
 impl ModuleManager {
@@ -33,6 +34,7 @@ impl ModuleManager {
             engine,
             pipeline: Vec::new(),
             shared,
+            context: EngineContext::Gameplay,
         }
     }
 
@@ -88,6 +90,11 @@ impl ModuleManager {
     }
 
     pub fn reload_module(&mut self, name: &str) {
+        let mut previous_state: Option<Vec<u8>> = None;
+        if let Some(old_module) = self.pipeline.iter_mut().find(|p| p.name == name) {
+            previous_state = old_module.call_serialize();
+        }
+
         self.pipeline.retain(|p| p.name != name);
         let path = format!("modules/{name}.wasm");
 
@@ -99,6 +106,16 @@ impl ModuleManager {
         if let Ok(mut module) =
             ModuleInstance::load(&self.engine, Path::new(&path), self.shared.clone())
         {
+            if let Some(state_bytes) = previous_state
+                && module.call_deserialize(&state_bytes).is_none()
+            {
+                eprintln!(
+                    "{} {} {}",
+                    "[WARN]".yellow().bold(),
+                    "Failed to deserialize state for hot-reloaded module:".bright_black(),
+                    name.italic().bright_blue().bold(),
+                );
+            }
             if let Ok(mut s) = self.shared.lock() {
                 s.loaded_modules.push(module.name.clone());
                 s.loaded_modules.sort();
@@ -114,19 +131,10 @@ impl ModuleManager {
         }
     }
 
-    pub fn handle_inputs(&mut self, event: KeyEvent) {
-        let mut input_blocked = false;
-        self.pipeline.retain_mut(|module| {
-            if input_blocked {
-                return true;
-            }
-            match module.call_handle_input(&event) {
-                Ok(consumed) => {
-                    if consumed {
-                        input_blocked = true;
-                    }
-                    true
-                }
+    pub fn handle_inputs(&mut self, state: InputState) {
+        self.pipeline
+            .retain_mut(|module| match module.call_handle_input(&state) {
+                Ok(_) => true,
                 Err(e) => {
                     eprintln!(
                         "{} {} {} {} {e}",
@@ -137,8 +145,7 @@ impl ModuleManager {
                     );
                     false
                 }
-            }
-        });
+            });
     }
 
     pub fn broadcast_logs(&mut self) {
