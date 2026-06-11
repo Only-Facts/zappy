@@ -22,6 +22,8 @@ TILE_SPAWN_DENSITY = {
 
 RESOURCE_KEYS = list(TILE_SPAWN_DENSITY.keys())
 
+STONE_KEYS = [r for r in RESOURCE_KEYS if r != "food"]
+
 EVOLUTION_TABLE = {
     # level: [nb_players linemate deraumere sibur mendiane phiras thystame]
     1: [1, 1, 0, 0, 0, 0, 0],
@@ -116,7 +118,7 @@ class ZappyEnv:
 
     def update(self):
         for resource, density in TILE_SPAWN_DENSITY.items():
-            target = int(self.tile_number * density)
+            target = max(int(self.tile_number * density), 1)
 
             current = sum(tile[resource] for tile in self.map)
 
@@ -138,7 +140,7 @@ class ZappyEnv:
                 and a is not agent
                 and a.survival_ticks > 0]
         stones_ok = all(tile[r] >= req
-                for r, req in zip(RESOURCE_KEYS, needed[1:]))
+                for r, req in zip(STONE_KEYS, needed[1:]))
         mask[ACTIONS["INCANTATE"]] = (len(agents_on_tile) + 1 >= needed[0]) and stones_ok
 
         ennemies_on_tile = [a for a in other_team
@@ -210,7 +212,7 @@ class ZappyEnv:
                             and a.level == agent.level
                             and a.survival_ticks > 0]
 
-            for resource, req in zip(RESOURCE_KEYS, needed[1:]):
+            for resource, req in zip(STONE_KEYS, needed[1:]):
                 tile[resource] -= req
             for a in agents_on_tile:
                 a.level += 1
@@ -327,10 +329,22 @@ class Agent:
         return np.concatenate([pos, direction, level, survival, inventory, sound, vision])
 
     def fitness(self):
+        needed = EVOLUTION_TABLE.get(self.level, None)
+        if needed:
+            stone_progress = sum(
+                min(self.inventory[r], needed[i + 1]) / max(needed[i + 1], 1)
+                for i, r in enumerate(STONE_KEYS)
+                if needed[i + 1] > 0
+            )
+            n_needed = sum(1 for i in range(len(STONE_KEYS)) if needed[i + 1] > 0)
+            stone_progress = stone_progress / max(n_needed, 1)
+        else:
+            stone_progress = 0.0
+
         return (
             self.level * 1000
+            + stone_progress * 200
             + self.survival_ticks * 0.1
-            + sum(self.inventory.values()) * 5
         )
 
     def move(self, move, facing=None):

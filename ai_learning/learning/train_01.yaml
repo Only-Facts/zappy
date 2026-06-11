@@ -2,8 +2,7 @@ SEED: 1
 
 # --- environment ---
 MAP_SIZE: [20, 20]        # small enough to find resources easily early in training
-MAX_EPISODE_TICKS: 8000   # 3000 / freq=100 = 30 real seconds per episode
-                          # enough time to reach lvl 2-3 if agents learn basics
+MAX_EPISODE_TICKS: 8000
 
 # --- population ---
 N_TEAMS: 2
