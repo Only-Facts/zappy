@@ -1,6 +1,7 @@
 use crate::client::{Client, ClientState};
 use crate::config::Config;
 use crate::constants::{DEFAULT_BIND_ADDRESS, READ_BUFFER_SIZE, TOKEN_INCREMENT, WELCOME_MESSAGE};
+use crate::player::Player;
 use crate::protocol::handle_complete_client_lines;
 use crate::team::Team;
 use mio::net::TcpListener;
@@ -54,6 +55,7 @@ pub fn accept_new_clients(
                         input_buffer: String::new(),
                         state: ClientState::WaitingTeamName,
                         team_name: None,
+                        player_id: None,
                     },
                 );
             }
@@ -73,6 +75,8 @@ pub fn read_from_client(
     clients: &mut HashMap<Token, Client>,
     config: &Config,
     teams: &mut [Team],
+    players: &mut Vec<Player>,
+    next_player_id: &mut usize,
 ) {
     let mut should_disconnect = false;
 
@@ -86,7 +90,7 @@ pub fn read_from_client(
             }
             Ok(size) => {
                 append_to_client_buffer(client, &buffer, size);
-                handle_complete_client_lines(client, config, teams);
+                handle_complete_client_lines(client, config, teams, players, next_player_id);
             }
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {}
             Err(error) => {

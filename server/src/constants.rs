@@ -40,3 +40,10 @@ pub const EMPTY_LINE: &str = "";
 pub const GRAPHIC_TEAM_NAME: &str = "GRAPHIC";
 pub const RESPONSE_SEPARATOR: &str = " ";
 pub const RESPONSE_END: &str = "\n";
+
+pub const FIRST_PLAYER_ID: usize = 1;
+pub const PLAYER_ID_INCREMENT: usize = 1;
+
+pub const INITIAL_PLAYER_LEVEL: usize = 1;
+pub const INITIAL_PLAYER_X: usize = 0;
+pub const INITIAL_PLAYER_Y: usize = 0;

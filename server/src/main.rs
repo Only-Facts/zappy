@@ -2,13 +2,17 @@ mod client;
 mod config;
 mod constants;
 mod network;
+mod player;
 mod protocol;
 mod team;
 
 use crate::client::Client;
 use crate::config::{parse_args, Config};
-use crate::constants::{ERROR_EXIT, EVENTS_CAPACITY, FIRST_CLIENT_TOKEN_ID, SERVER_TOKEN, USAGE};
+use crate::constants::{
+    ERROR_EXIT, EVENTS_CAPACITY, FIRST_CLIENT_TOKEN_ID, FIRST_PLAYER_ID, SERVER_TOKEN, USAGE,
+};
 use crate::network::{accept_new_clients, create_listener, read_from_client};
+use crate::player::Player;
 use crate::team::Team;
 use mio::{Events, Interest, Poll, Token};
 use std::collections::HashMap;
@@ -38,6 +42,9 @@ fn main() -> io::Result<()> {
     let mut next_token_id = FIRST_CLIENT_TOKEN_ID;
     let mut teams = create_teams(&config);
 
+    let mut players: Vec<Player> = Vec::new();
+    let mut next_player_id = FIRST_PLAYER_ID;
+
     println!("Server listening on port {}", config.port);
 
     loop {
@@ -49,7 +56,14 @@ fn main() -> io::Result<()> {
                     accept_new_clients(&mut listener, &mut poll, &mut clients, &mut next_token_id);
                 }
                 client_token => {
-                    read_from_client(client_token, &mut clients, &config, &mut teams);
+                    read_from_client(
+                        client_token,
+                        &mut clients,
+                        &config,
+                        &mut teams,
+                        &mut players,
+                        &mut next_player_id,
+                    );
                 }
             }
         }

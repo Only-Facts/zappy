@@ -12,4 +12,5 @@ pub struct Client {
     pub input_buffer: String,
     pub state: ClientState,
     pub team_name: Option<String>,
+    pub player_id: Option<usize>,
 }
