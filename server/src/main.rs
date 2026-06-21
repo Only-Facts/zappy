@@ -1,6 +1,7 @@
 mod client;
 mod config;
 mod constants;
+mod map;
 mod network;
 mod player;
 mod protocol;
@@ -11,6 +12,7 @@ use crate::config::{parse_args, Config};
 use crate::constants::{
     ERROR_EXIT, EVENTS_CAPACITY, FIRST_CLIENT_TOKEN_ID, FIRST_PLAYER_ID, SERVER_TOKEN, USAGE,
 };
+use crate::map::GameMap;
 use crate::network::{accept_new_clients, create_listener, read_from_client};
 use crate::player::Player;
 use crate::team::Team;
@@ -30,9 +32,17 @@ fn main() -> io::Result<()> {
 
     println!("Starting server with config: {:?}", config);
 
+    let game_map = GameMap::new(config.width, config.height);
+
+    println!(
+        "Created map: {}x{} with {} tiles",
+        game_map.width,
+        game_map.height,
+        game_map.tile_count()
+    );
+
     let mut poll = Poll::new()?;
     let mut events = Events::with_capacity(EVENTS_CAPACITY);
-
     let mut listener = create_listener(config.port)?;
 
     poll.registry()
@@ -41,7 +51,6 @@ fn main() -> io::Result<()> {
     let mut clients: HashMap<Token, Client> = HashMap::new();
     let mut next_token_id = FIRST_CLIENT_TOKEN_ID;
     let mut teams = create_teams(&config);
-
     let mut players: Vec<Player> = Vec::new();
     let mut next_player_id = FIRST_PLAYER_ID;
 

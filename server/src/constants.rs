@@ -47,3 +47,5 @@ pub const PLAYER_ID_INCREMENT: usize = 1;
 pub const INITIAL_PLAYER_LEVEL: usize = 1;
 pub const INITIAL_PLAYER_X: usize = 0;
 pub const INITIAL_PLAYER_Y: usize = 0;
+
+pub const EMPTY_RESOURCE_COUNT: usize = 0;
