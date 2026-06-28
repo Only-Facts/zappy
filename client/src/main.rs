@@ -3,19 +3,41 @@ mod client;
 mod protocol;
 mod state;
 
+use std::str::FromStr;
+
 use agent::{NeuralAgent, load_config, load_genome};
 use client::ZappyClient;
 
 const DEFAULT_HOST: &str = "localhost";
+const CONFIG_PATH: &str = "arch.json";
+const GENOME_PATH: &str = "best_genome.npy";
 
 fn print_usage() {
-    eprintln!("USAGE: ./zappy_ai -p port -n name -h machine");
-    eprintln!("  -p port     port number");
-    eprintln!("  -n name     name of the team");
-    eprintln!("  -h machine  hostname of the server (default: {DEFAULT_HOST})");
+    println!("USAGE: ./zappy_ai -p port -n name -h machine");
+    println!("  -p port     port number");
+    println!("  -n name     name of the team");
+    println!("  -h machine  hostname of the server (default: {DEFAULT_HOST})");
+}
+
+fn default_env_variable<T>(var: Option<T>, env_var: &str) -> Option<T>
+where
+    T: FromStr,
+{
+    if var.is_some() {
+        return var;
+    }
+
+    if let Ok(s) = std::env::var(env_var)
+        && let Some(parsed) = s.parse::<T>().ok().map(Some)
+    {
+        return parsed;
+    }
+
+    var
 }
 
 fn main() -> anyhow::Result<()> {
+    dotenvy::dotenv().ok();
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     if args.iter().any(|a| a == "--help") {
@@ -60,11 +82,25 @@ fn main() -> anyhow::Result<()> {
         i += 1;
     }
 
-    let port = port.ok_or_else(|| anyhow::anyhow!("-p port is required"))?;
-    let team = team.ok_or_else(|| anyhow::anyhow!("-n name is required"))?;
+    let port = default_env_variable(port, "ZAPPY_PORT")
+        .ok_or_else(|| anyhow::anyhow!("-p port is required"))?;
+    let team = default_env_variable(team, "ZAPPY_TEAMS")
+        .ok_or_else(|| anyhow::anyhow!("-n name is required"))?;
 
-    let config = load_config("arch.json")?;
-    let genome = load_genome("best_genome.npy")?;
+    let config = match load_config(CONFIG_PATH) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error loading config: {e:?}");
+            return Err(e);
+        }
+    };
+    let genome = match load_genome(GENOME_PATH) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("Error loading genome: {e:?}");
+            return Err(e);
+        }
+    };
     let agent = NeuralAgent { config, genome };
 
     let mut client = ZappyClient::connect(&host, port, &team)?;
