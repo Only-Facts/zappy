@@ -1,12 +1,12 @@
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
- 
+
 use crate::agent::NeuralAgent;
-use crate::protocol::{action_to_command, parse_response, ServerResponse};
+use crate::protocol::{ServerResponse, action_to_command, parse_response};
 use crate::state::{GameState, TICKS_PER_FOOD};
- 
+
 const CMD_BUFFER_LIMIT: usize = 10;
- 
+
 pub struct ZappyClient {
     reader: BufReader<TcpStream>,
     writer: TcpStream,
@@ -15,7 +15,7 @@ pub struct ZappyClient {
     state: Option<GameState>,
     response_queue: Vec<ServerResponse>,
 }
- 
+
 impl ZappyClient {
     pub fn connect(host: &str, port: u16, team: &str) -> anyhow::Result<Self> {
         let addr = format!("{host}:{port}");
@@ -23,30 +23,34 @@ impl ZappyClient {
             .map_err(|e| anyhow::anyhow!("Cannot connect to {addr}: {e}"))?;
         let writer = stream.try_clone()?;
         let mut reader = BufReader::new(stream);
- 
+
         let mut line = String::new();
- 
+
         reader.read_line(&mut line)?;
         if line.trim() != "WELCOME" {
             anyhow::bail!("Expected WELCOME, got {:?}", line.trim());
         }
         eprintln!("[AI] Connected. Sending team: {team}");
- 
+
         {
             let mut w = writer.try_clone()?;
             w.write_all(format!("{team}\n").as_bytes())?;
             w.flush()?;
         }
- 
+
         line.clear();
         reader.read_line(&mut line)?;
-        let client_num: u32 = line.trim().parse()
+        let client_num: u32 = line
+            .trim()
+            .parse()
             .map_err(|_| anyhow::anyhow!("Expected CLIENT-NUM, got {:?}", line.trim()))?;
         eprintln!("[AI] Free slots: {client_num}");
- 
+
         line.clear();
         reader.read_line(&mut line)?;
-        let dims: Vec<u32> = line.trim().split(' ')
+        let dims: Vec<u32> = line
+            .trim()
+            .split(' ')
             .filter_map(|t| t.parse().ok())
             .collect();
         if dims.len() < 2 {
@@ -54,7 +58,7 @@ impl ZappyClient {
         }
         let (map_w, map_h) = (dims[0], dims[1]);
         eprintln!("[AI] Map size: {map_w}x{map_h}");
- 
+
         Ok(Self {
             reader,
             writer,
@@ -64,7 +68,7 @@ impl ZappyClient {
             response_queue: Vec::new(),
         })
     }
- 
+
     fn send(&mut self, cmd: &str) -> anyhow::Result<()> {
         if self.pending >= CMD_BUFFER_LIMIT {
             self.recv_one()?;
@@ -76,7 +80,7 @@ impl ZappyClient {
         eprintln!("[AI →] {cmd}");
         Ok(())
     }
- 
+
     fn recv_one(&mut self) -> anyhow::Result<ServerResponse> {
         loop {
             let mut line = String::new();
@@ -89,7 +93,7 @@ impl ZappyClient {
                 continue;
             }
             eprintln!("[AI ←] {trimmed}");
- 
+
             if let Some(resp) = parse_response(trimmed) {
                 if self.pending > 0 {
                     self.pending -= 1;
@@ -99,7 +103,7 @@ impl ZappyClient {
             eprintln!("[AI] Unknown server line: {trimmed:?}");
         }
     }
- 
+
     fn drain_pending(&mut self) -> anyhow::Result<()> {
         while self.pending > 0 {
             let resp = self.recv_one()?;
@@ -107,12 +111,17 @@ impl ZappyClient {
         }
         Ok(())
     }
- 
+
     fn handle_unsolicited(&mut self, resp: ServerResponse) {
         match resp {
-            ServerResponse::Message { direction, .. } => {
+            ServerResponse::Message {
+                direction,
+                broadcast,
+                ..
+            } => {
                 if let Some(s) = &mut self.state {
                     s.last_message = Some(direction);
+                    s.last_broadcast = broadcast;
                 }
             }
             ServerResponse::Eject { direction } => {
@@ -130,14 +139,14 @@ impl ZappyClient {
             _ => {}
         }
     }
- 
+
     fn refresh_state(&mut self) -> anyhow::Result<()> {
         self.send("Look")?;
         self.send("Inventory")?;
- 
+
         let mut got_look = false;
         let mut got_inv = false;
- 
+
         while !got_look || !got_inv {
             let resp = self.recv_one()?;
             let state = self.state.as_mut().unwrap();
@@ -146,8 +155,17 @@ impl ZappyClient {
                     state.look_tiles = tiles;
                     got_look = true;
                 }
-                ServerResponse::Inventory { food, linemate, deraumere, sibur, mendiane, phiras, thystame } => {
-                    state.inventory = [food, linemate, deraumere, sibur, mendiane, phiras, thystame];
+                ServerResponse::Inventory {
+                    food,
+                    linemate,
+                    deraumere,
+                    sibur,
+                    mendiane,
+                    phiras,
+                    thystame,
+                } => {
+                    state.inventory =
+                        [food, linemate, deraumere, sibur, mendiane, phiras, thystame];
                     state.survival_ticks = food * TICKS_PER_FOOD;
                     got_inv = true;
                 }
@@ -156,13 +174,13 @@ impl ZappyClient {
         }
         Ok(())
     }
- 
+
     pub fn run(&mut self, agent: &NeuralAgent) -> anyhow::Result<()> {
         eprintln!("[AI] Starting main loop");
- 
+
         loop {
             self.refresh_state()?;
- 
+
             let action = {
                 let state = self.state.as_mut().unwrap();
                 let sv = state.to_state_vector();
@@ -171,10 +189,10 @@ impl ZappyClient {
             };
             let cmd = action_to_command(action);
             eprintln!("[AI] Action {action} → {cmd}");
- 
+
             self.send(cmd)?;
             let resp = self.recv_one()?;
- 
+
             match resp {
                 ServerResponse::Dead => {
                     eprintln!("[AI] Player died. Exiting.");

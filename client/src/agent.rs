@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use std::fs;
 use ndarray::Array1;
 use ndarray_npy::read_npy;
+use serde::{Deserialize, Serialize};
+use std::fs;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ModelConfig {
