@@ -12,6 +12,16 @@ pub const MAX_LEVEL: u32 = 8;
 pub const INV_NORM_CAP: u32 = 20;
 pub const VIS_NORM_CAP: u32 = 10;
 
+pub const EVOLUTION_TABLE: [[u32; 7]; 7] = [
+    [1, 1, 0, 0, 0, 0, 0],
+    [2, 1, 1, 1, 0, 0, 0],
+    [2, 2, 0, 1, 0, 2, 0],
+    [4, 1, 1, 2, 0, 1, 0],
+    [4, 1, 2, 1, 3, 0, 0],
+    [6, 1, 2, 3, 0, 1, 0],
+    [6, 2, 2, 2, 2, 2, 1],
+];
+
 pub const STATE_DIM: usize =
     2 + 4 + 1 + 1 + N_RESOURCES + BROADCAST_DIM + MAX_VISION_TILES * TILE_FEATURES;
 
@@ -102,7 +112,7 @@ impl GameState {
 
         let tile = self.look_tiles.first();
 
-        mask[0] = true;
+        mask[0] = self.can_incantate(tile);
 
         mask[1] = tile.map(|t| t.players > 1).unwrap_or(false);
 
@@ -135,6 +145,27 @@ impl GameState {
         mask[22] = true;
 
         mask
+    }
+
+    fn can_incantate(&self, tile: Option<&TileView>) -> bool {
+        if self.level == 0 || self.level as usize > EVOLUTION_TABLE.len() {
+            return false;
+        }
+
+        let Some(tile) = tile else {
+            return false;
+        };
+
+        let needed = EVOLUTION_TABLE[(self.level - 1) as usize];
+        if tile.players < needed[0] {
+            return false;
+        }
+
+        let resources = tile.resources();
+        resources[1..]
+            .iter()
+            .zip(needed.iter().skip(1))
+            .all(|(&available, &required)| available >= required)
     }
 
     pub fn set_position(&mut self, x: u32, y: u32, orientation: u8) {
@@ -488,9 +519,19 @@ fn test_mask_eat_requires_food_in_inventory() {
 }
 
 #[test]
-fn test_mask_incantation_always_allowed() {
+fn test_mask_incantation_blocked_without_requirements() {
     let s = empty_state();
-    assert!(s.valid_mask()[0], "Incantation should always be in mask");
+    assert!(!s.valid_mask()[0], "Incantation should be blocked without tile data");
+}
+
+#[test]
+fn test_mask_incantation_allowed_when_requirements_met() {
+    let mut s = empty_state();
+    let mut tile = TileView::default();
+    tile.players = 1;
+    tile.linemate = 1;
+    s.look_tiles = vec![tile];
+    assert!(s.valid_mask()[0], "Incantation should be allowed when level 1 requirements are met");
 }
 
 #[test]
